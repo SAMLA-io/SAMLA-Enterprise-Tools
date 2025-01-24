@@ -1,283 +1,227 @@
-#!/usr/bin/env uv run
-####################################################################
-# Sample TUI app with a push to talk interface to the Realtime API #
-# If you have `uv` installed and the `OPENAI_API_KEY`              #
-# environment variable set, you can run this example with just     #
-#                                                                  #
-# `./examples/realtime/push_to_talk_app.py`                        #
-####################################################################
-#
-# /// script
-# requires-python = ">=3.9"
-# dependencies = [
-#     "textual",
-#     "numpy",
-#     "pyaudio",
-#     "pydub",
-#     "sounddevice",
-#     "openai[realtime]",
-# ]
-#
-# [tool.uv.sources]
-# openai = { path = "../../", editable = true }
-# ///
-from __future__ import annotations
-
+import os
+import json
 import base64
 import asyncio
-from typing import Any, cast
-from typing_extensions import override
-
-from textual import events
-from audio_util import CHANNELS, SAMPLE_RATE, AudioPlayerAsync
-from textual.app import App, ComposeResult
-from textual.widgets import Button, Static, RichLog
-from textual.reactive import reactive
-from textual.containers import Container
-
-from openai import AsyncOpenAI
-from openai.types.beta.realtime.session import Session
-from openai.resources.beta.realtime.realtime import AsyncRealtimeConnection
-import os
-
-os.environ['OPENAI_API_KEY'] = ''
-
-class SessionDisplay(Static):
-    """A widget that shows the current session ID."""
-
-    session_id = reactive("")
-
-    @override
-    def render(self) -> str:
-        return f"Session ID: {self.session_id}" if self.session_id else "Connecting..."
+import websockets
+from fastapi import FastAPI, WebSocket, Request
+from fastapi.responses import HTMLResponse
+from fastapi.websockets import WebSocketDisconnect
+from twilio.twiml.voice_response import VoiceResponse, Connect, Say, Stream
+from dotenv import load_dotenv
+import logging
 
 
-class AudioStatusIndicator(Static):
-    """A widget that shows the current audio recording status."""
-
-    is_recording = reactive(False)
-
-    @override
-    def render(self) -> str:
-        status = (
-            "🔴 Recording... (Press K to stop)" if self.is_recording else "⚪ Press K to start recording (Q to quit)"
-        )
-        return status
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 
-class RealtimeApp(App[None]):
-    CSS = """
-        Screen {
-            background: #1a1b26;  /* Dark blue-grey background */
+load_dotenv()
+# Configuration
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY') # requires OpenAI Realtime API Access
+PORT = int(os.getenv('PORT', 5050))
+
+
+SYSTEM_MESSAGE = (
+  "You are a helpful and bubbly AI assistant who answers any questions I ask"
+)
+VOICE = 'alloy'
+LOG_EVENT_TYPES = [
+  'response.content.done', 'rate_limits.updated', 'response.done',
+  'input_audio_buffer.committed', 'input_audio_buffer.speech_stopped',
+  'input_audio_buffer.speech_started', 'response.create', 'session.created'
+]
+SHOW_TIMING_MATH = False
+app = FastAPI()
+if not OPENAI_API_KEY:
+  raise ValueError('Missing the OpenAI API key. Please set it in the .env file.')
+
+
+@app.get("/", response_class=HTMLResponse)
+async def index_page():
+    return "<html><body><h1>Twilio Media Stream Server is running!</h1></body></html>"
+@app.api_route("/incoming-call", methods=["GET", "POST"])
+async def handle_incoming_call(request: Request):
+    """Handle incoming call and return TwiML response to connect to Media Stream."""
+    logger.info("Received incoming call request from: %s", request.client.host)
+    response = VoiceResponse()
+    host = request.url.hostname
+    connect = Connect()
+    connect.stream(url=f'wss://{host}/media-stream')
+    response.append(connect)
+    logger.info("Successfully created the TwiML response")
+    return HTMLResponse(content=str(response), media_type="application/xml")
+
+
+@app.websocket("/media-stream")
+async def handle_media_stream(websocket: WebSocket):
+    """Handle WebSocket connections between Twilio and OpenAI."""
+    print("Client connected")
+    await websocket.accept()
+
+    async with websockets.connect(
+        'wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-10-01',
+        extra_headers={
+            "Authorization": f"Bearer {OPENAI_API_KEY}",
+            "OpenAI-Beta": "realtime=v1"
         }
+    ) as openai_ws:
+        await send_session_update(openai_ws)
 
-        Container {
-            border: double rgb(91, 164, 91);
+        # Connection specific state
+        stream_sid = None
+        latest_media_timestamp = 0
+        last_assistant_item = None
+        mark_queue = []
+        response_start_timestamp_twilio = None
+
+        async def receive_from_twilio():
+            """Receive audio data from Twilio and send it to the OpenAI Realtime API."""
+            nonlocal stream_sid, latest_media_timestamp
+            try:
+                async for message in websocket.iter_text():
+                    data = json.loads(message)
+                    if data['event'] == 'media' and openai_ws.open:
+                        latest_media_timestamp = int(data['media']['timestamp'])
+                        audio_append = {
+                            "type": "input_audio_buffer.append",
+                            "audio": data['media']['payload']
+                        }
+                        await openai_ws.send(json.dumps(audio_append))
+                    elif data['event'] == 'start':
+                        stream_sid = data['start']['streamSid']
+                        print(f"Incoming stream has started {stream_sid}")
+                        response_start_timestamp_twilio = None
+                        latest_media_timestamp = 0
+                        last_assistant_item = None
+                    elif data['event'] == 'mark':
+                        if mark_queue:
+                            mark_queue.pop(0)
+            except WebSocketDisconnect:
+                print("Client disconnected.")
+                if openai_ws.open:
+                    await openai_ws.close()
+
+        async def send_to_twilio():
+            """Receive events from the OpenAI Realtime API, send audio back to Twilio."""
+            nonlocal stream_sid, last_assistant_item, response_start_timestamp_twilio
+            try:
+                async for openai_message in openai_ws:
+                    response = json.loads(openai_message)
+                    if response['type'] in LOG_EVENT_TYPES:
+                        print(f"Received event: {response['type']}", response)
+
+                    if response.get('type') == 'response.audio.delta' and 'delta' in response:
+                        audio_payload = base64.b64encode(base64.b64decode(response['delta'])).decode('utf-8')
+                        audio_delta = {
+                            "event": "media",
+                            "streamSid": stream_sid,
+                            "media": {
+                                "payload": audio_payload
+                            }
+                        }
+                        await websocket.send_json(audio_delta)
+
+                        if response_start_timestamp_twilio is None:
+                            response_start_timestamp_twilio = latest_media_timestamp
+                            if SHOW_TIMING_MATH:
+                                print(f"Setting start timestamp for new response: {response_start_timestamp_twilio}ms")
+
+                        # Update last_assistant_item safely
+                        if response.get('item_id'):
+                            last_assistant_item = response['item_id']
+
+                        await send_mark(websocket, stream_sid)
+
+                    # Trigger an interruption. Your use case might work better using `input_audio_buffer.speech_stopped`, or combining the two.
+                    if response.get('type') == 'input_audio_buffer.speech_started':
+                        print("Speech started detected.")
+                        if last_assistant_item:
+                            print(f"Interrupting response with id: {last_assistant_item}")
+                            await handle_speech_started_event()
+            except Exception as e:
+                print(f"Error in send_to_twilio: {e}")
+
+        async def handle_speech_started_event():
+            """Handle interruption when the caller's speech starts."""
+            nonlocal response_start_timestamp_twilio, last_assistant_item
+            print("Handling speech started event.")
+            if mark_queue and response_start_timestamp_twilio is not None:
+                elapsed_time = latest_media_timestamp - response_start_timestamp_twilio
+                if SHOW_TIMING_MATH:
+                    print(f"Calculating elapsed time for truncation: {latest_media_timestamp} - {response_start_timestamp_twilio} = {elapsed_time}ms")
+
+                if last_assistant_item:
+                    if SHOW_TIMING_MATH:
+                        print(f"Truncating item with ID: {last_assistant_item}, Truncated at: {elapsed_time}ms")
+
+                    truncate_event = {
+                        "type": "conversation.item.truncate",
+                        "item_id": last_assistant_item,
+                        "content_index": 0,
+                        "audio_end_ms": elapsed_time
+                    }
+                    await openai_ws.send(json.dumps(truncate_event))
+
+                await websocket.send_json({
+                    "event": "clear",
+                    "streamSid": stream_sid
+                })
+
+                mark_queue.clear()
+                last_assistant_item = None
+                response_start_timestamp_twilio = None
+
+        async def send_mark(connection, stream_sid):
+            if stream_sid:
+                mark_event = {
+                    "event": "mark",
+                    "streamSid": stream_sid,
+                    "mark": {"name": "responsePart"}
+                }
+                await connection.send_json(mark_event)
+                mark_queue.append('responsePart')
+
+        await asyncio.gather(receive_from_twilio(), send_to_twilio())
+
+async def send_initial_conversation_item(openai_ws):
+    """Send initial conversation item if AI talks first."""
+    initial_conversation_item = {
+        "type": "conversation.item.create",
+        "item": {
+            "type": "message",
+            "role": "user",
+            "content": [
+                {
+                    "type": "input_text",
+                    "text": "Greet the user with 'Hello there! I am an AI voice assistant that will help you with any questions you may have. Please ask me anything you want to know.'"
+                }
+            ]
         }
+    }
+    await openai_ws.send(json.dumps(initial_conversation_item))
+    await openai_ws.send(json.dumps({"type": "response.create"}))
 
-        Horizontal {
-            width: 100%;
-        }
+async def send_session_update(openai_ws):
+    """Send session update to OpenAI WebSocket."""
 
-        #input-container {
-            height: 5;  /* Explicit height for input container */
-            margin: 1 1;
-            padding: 1 2;
-        }
+    session_update = {
+      "type": "session.update",
+      "session": {
+          "turn_detection": {"type": "server_vad"},
+          "input_audio_format": "g711_ulaw",
+          "output_audio_format": "g711_ulaw",
+          "voice": VOICE,
+          "instructions": SYSTEM_MESSAGE,
+          "modalities": ["text", "audio"],
+          "temperature": 0.8,
+      }
+    }
+    print('Sending session update:', json.dumps(session_update))
+    await openai_ws.send(json.dumps(session_update))
 
-        Input {
-            width: 80%;
-            height: 3;  /* Explicit height for input */
-        }
-
-        Button {
-            width: 20%;
-            height: 3;  /* Explicit height for button */
-        }
-
-        #bottom-pane {
-            width: 100%;
-            height: 82%;  /* Reduced to make room for session display */
-            border: round rgb(205, 133, 63);
-            content-align: center middle;
-        }
-
-        #status-indicator {
-            height: 3;
-            content-align: center middle;
-            background: #2a2b36;
-            border: solid rgb(91, 164, 91);
-            margin: 1 1;
-        }
-
-        #session-display {
-            height: 3;
-            content-align: center middle;
-            background: #2a2b36;
-            border: solid rgb(91, 164, 91);
-            margin: 1 1;
-        }
-
-        Static {
-            color: white;
-        }
-    """
-
-    client: AsyncOpenAI
-    should_send_audio: asyncio.Event
-    audio_player: AudioPlayerAsync
-    last_audio_item_id: str | None
-    connection: AsyncRealtimeConnection | None
-    session: Session | None
-    connected: asyncio.Event
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.connection = None
-        self.session = None
-        self.client = AsyncOpenAI()
-        self.audio_player = AudioPlayerAsync()
-        self.last_audio_item_id = None
-        self.should_send_audio = asyncio.Event()
-        self.connected = asyncio.Event()
-
-    @override
-    def compose(self) -> ComposeResult:
-        """Create child widgets for the app."""
-        with Container():
-            yield SessionDisplay(id="session-display")
-            yield AudioStatusIndicator(id="status-indicator")
-            yield RichLog(id="bottom-pane", wrap=True, highlight=True, markup=True)
-
-    async def on_mount(self) -> None:
-        self.run_worker(self.handle_realtime_connection())
-        self.run_worker(self.send_mic_audio())
-
-    async def handle_realtime_connection(self) -> None:
-        async with self.client.beta.realtime.connect(model="gpt-4o-realtime-preview-2024-10-01") as conn:
-            self.connection = conn
-            self.connected.set()
-
-            # note: this is the default and can be omitted
-            # if you want to manually handle VAD yourself, then set `'turn_detection': None`
-            await conn.session.update(session={"turn_detection": {"type": "server_vad"}})
-
-            acc_items: dict[str, Any] = {}
-
-            async for event in conn:
-                if event.type == "session.created":
-                    self.session = event.session
-                    session_display = self.query_one(SessionDisplay)
-                    assert event.session.id is not None
-                    session_display.session_id = event.session.id
-                    continue
-
-                if event.type == "session.updated":
-                    self.session = event.session
-                    continue
-
-                if event.type == "response.audio.delta":
-                    if event.item_id != self.last_audio_item_id:
-                        self.audio_player.reset_frame_count()
-                        self.last_audio_item_id = event.item_id
-
-                    bytes_data = base64.b64decode(event.delta)
-                    self.audio_player.add_data(bytes_data)
-                    continue
-
-                if event.type == "response.audio_transcript.delta":
-                    try:
-                        text = acc_items[event.item_id]
-                    except KeyError:
-                        acc_items[event.item_id] = event.delta
-                    else:
-                        acc_items[event.item_id] = text + event.delta
-
-                    # Clear and update the entire content because RichLog otherwise treats each delta as a new line
-                    bottom_pane = self.query_one("#bottom-pane", RichLog)
-                    bottom_pane.clear()
-                    bottom_pane.write(acc_items[event.item_id])
-                    continue
-
-    async def _get_connection(self) -> AsyncRealtimeConnection:
-        await self.connected.wait()
-        assert self.connection is not None
-        return self.connection
-
-    async def send_mic_audio(self) -> None:
-        import sounddevice as sd  # type: ignore
-
-        sent_audio = False
-
-        device_info = sd.query_devices()
-        print(device_info)
-
-        read_size = int(SAMPLE_RATE * 0.02)
-
-        stream = sd.InputStream(
-            channels=CHANNELS,
-            samplerate=SAMPLE_RATE,
-            dtype="int16",
-        )
-        stream.start()
-
-        status_indicator = self.query_one(AudioStatusIndicator)
-
-        try:
-            while True:
-                if stream.read_available < read_size:
-                    await asyncio.sleep(0)
-                    continue
-
-                await self.should_send_audio.wait()
-                status_indicator.is_recording = True
-
-                data, _ = stream.read(read_size)
-
-                connection = await self._get_connection()
-                if not sent_audio:
-                    asyncio.create_task(connection.send({"type": "response.cancel"}))
-                    sent_audio = True
-
-                await connection.input_audio_buffer.append(audio=base64.b64encode(cast(Any, data)).decode("utf-8"))
-
-                await asyncio.sleep(0)
-        except KeyboardInterrupt:
-            pass
-        finally:
-            stream.stop()
-            stream.close()
-
-    async def on_key(self, event: events.Key) -> None:
-        """Handle key press events."""
-        if event.key == "enter":
-            self.query_one(Button).press()
-            return
-
-        if event.key == "q":
-            self.exit()
-            return
-
-        if event.key == "k":
-            status_indicator = self.query_one(AudioStatusIndicator)
-            if status_indicator.is_recording:
-                self.should_send_audio.clear()
-                status_indicator.is_recording = False
-
-                if self.session and self.session.turn_detection is None:
-                    # The default in the API is that the model will automatically detect when the user has
-                    # stopped talking and then start responding itself.
-                    #
-                    # However if we're in manual `turn_detection` mode then we need to
-                    # manually tell the model to commit the audio buffer and start responding.
-                    conn = await self._get_connection()
-                    await conn.input_audio_buffer.commit()
-                    await conn.response.create()
-            else:
-                self.should_send_audio.set()
-                status_indicator.is_recording = True
-
+    await send_initial_conversation_item(openai_ws)
 
 if __name__ == "__main__":
-    app = RealtimeApp()
-    app.run()
+  import uvicorn
+  uvicorn.run(app, host="0.0.0.0", port=PORT)
