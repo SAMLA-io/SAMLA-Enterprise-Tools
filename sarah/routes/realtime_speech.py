@@ -45,7 +45,8 @@ async def handle_incoming_call(request: Request):
     """Handle incoming call and return TwiML response to connect to Media Stream."""
     logger.info("Received incoming call request from: %s", request.client.host)
     response = VoiceResponse()
-    host = request.url.hostname
+    #host = request.url.hostname
+    host = request.headers.get("host") 
     connect = Connect()
     connect.stream(url=f'wss://{host}/media-stream')
     response.append(connect)
@@ -60,7 +61,7 @@ async def handle_media_stream(websocket: WebSocket):
     await websocket.accept()
 
     async with websockets.connect(
-        'wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-10-01',
+        'wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview',
         extra_headers={
             "Authorization": f"Bearer {OPENAI_API_KEY}",
             "OpenAI-Beta": "realtime=v1"
@@ -224,4 +225,4 @@ async def send_session_update(openai_ws):
 
 if __name__ == "__main__":
   import uvicorn
-  uvicorn.run(app, host="0.0.0.0", port=PORT)
+  uvicorn.run(app, host="127.0.0.1", port=PORT)
