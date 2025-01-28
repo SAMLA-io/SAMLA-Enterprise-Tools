@@ -1,44 +1,14 @@
-# Samla Quick Start
+from cerebraai.models.orchestrator import Orchestrator
+from cerebraai.models.llm import LLM, LLMConditions
+from sentence_transformers import SentenceTransformer
+from .models.agent import Agent
 
-SAMLA Agent is an intelligent agent system that orchestrates multiple LLM models and includes RAG (Retrieval-Augmented Generation) capabilities.
+from openai import OpenAI
+from dotenv import load_dotenv
+import os
 
-## Features
+load_dotenv()
 
-- 🤖 Multi-model orchestration with GPT-4, GPT-4 Optimized, and GPT-3.5 Turbo
-- 📚 RAG (Retrieval-Augmented Generation) support
-- 📄 Multiple file format support (PDF, DOCX, TXT, CSV, XLSX)
-- 🔄 Intelligent model selection based on task requirements
-- 💡 Sentiment and domain-aware processing
-
-## Installation
-
-```bash
-git clone https://github.com/samla-ai/samla-agent.git
-cd samla-agent
-pip install -r requirements.txt
-```
-
-## Environment Setup
-
-Create a `.env` file in your project root with the following variables:
-
-```
-OPENAI_API_KEY=your_openai_api_key
-RAG_URL=your_rag_service_url
-RAG_COLLECTION=your_rag_collection_name
-MONGO_AWS_URL=your_mongo_url
-MONGO_AWS_TOKEN=your_mongo_token
-MONGO_CHAT_HISTORY_COLLECTION=your_collection_name
-```
-
-## Quick Start
-
-All setup is done in the `setup.py` file.
-
-1. Initialize dotenv variables
-2. Create the LLMs and start the orchestrator. You can add more LLMs to the orchestrator if you want, as long as they have the same structure as the ones already there (the executor returns a valid response).
-
-```python
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 RAG_URL = os.getenv("RAG_URL")
@@ -109,20 +79,15 @@ orchestrator = Orchestrator(
     llms=llms,
     text_model=SentenceTransformer("all-MiniLM-L12-v2")
 )
-```
 
-3. Create the agent and start the chat
+agent = Agent("SAMUEL", accepted_files=["pdf", "docx", "txt", "csv", "xlsx"], rag=True)
 
-```python
-agent = Agent("Samla agent", accepted_files=["pdf", "docx", "txt", "csv", "xlsx"], rag=True)
-```
+def add_llm(llm: LLM):
+    orchestrator.add_llm(llm)
 
-4. Run `fastapi run agent/app.py --port 8000` to start the FastAPI server
+def get_orchestrator():
+    return orchestrator
 
-## License
+def execute_orchestrator(prompt: str):
+    return orchestrator.execute(prompt)
 
-This project is open-sourced under the MIT License - see the LICENSE file for details.
-
-## Contributing
-
-- [@jpgtzg](https://github.com/jpgtzg)
