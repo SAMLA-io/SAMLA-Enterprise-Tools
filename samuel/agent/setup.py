@@ -7,6 +7,10 @@ from openai import OpenAI
 from dotenv import load_dotenv
 import os
 
+import nltk
+nltk.download('punkt_tab')
+nltk.download('vader_lexicon')
+
 load_dotenv()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
