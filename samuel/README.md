@@ -1,6 +1,6 @@
-# Samla Quick Start
+# SAMUEL
 
-SAMLA Agent is an intelligent agent system that orchestrates multiple LLM models and includes RAG (Retrieval-Augmented Generation) capabilities.
+SAMUEL is an intelligent agent system that orchestrates multiple LLM models and includes RAG (Retrieval-Augmented Generation) capabilities.
 
 ## Features
 
@@ -13,8 +13,8 @@ SAMLA Agent is an intelligent agent system that orchestrates multiple LLM models
 ## Installation
 
 ```bash
-git clone https://github.com/samla-ai/samla-agent.git
-cd samla-agent
+git clone https://github.com/samla-io/samla-enterprise-tools.git
+cd samla-enterprise-tools
 pip install -r requirements.txt
 ```
 
@@ -37,6 +37,12 @@ All setup is done in the `setup.py` file.
 
 1. Initialize dotenv variables
 2. Create the LLMs and start the orchestrator. You can add more LLMs to the orchestrator if you want, as long as they have the same structure as the ones already there (the executor returns a valid response).
+3. You can also change the weights of the orchestrator to give more or less importance to each LLM.
+4. The necessary weights are:
+    - weight between the importance of the semantic, topic and sentiment.
+    - weight between the importance of the positive and negative sentiments.
+    - weight between the importance of the happy and sad and other emotions.
+5. These weights can be overridden in the `execute_orchestrator` function.
 
 ```python
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -105,16 +111,23 @@ llms = [
     LLM("gpt-3.5-turbo", LLMConditions(domain="general", sentiment="positive", topic="general", description="Suitable for simple, straightforward tasks."), execute_openai_3_5),
 ]
 
+weights: dict = {"semantic": 0.3, "topic": 0.5, "sentiment": 0.3}
+sentiment_weights: dict = {"positive": 0.5, "negative": 0.5}
+emotion_weights: dict = {"happy": 0.5, "sad": 0.5}
+
 orchestrator = Orchestrator(
     llms=llms,
-    text_model=SentenceTransformer("all-MiniLM-L12-v2")
+    text_model=SentenceTransformer("all-MiniLM-L12-v2"),
+    weights=weights,
+    sentiment_weights=sentiment_weights,
+    emotion_weights=emotion_weights
 )
 ```
 
 3. Create the agent and start the chat
 
 ```python
-agent = Agent("Samla agent", accepted_files=["pdf", "docx", "txt", "csv", "xlsx"], rag=True)
+agent = Agent("SAMUEl", accepted_files=["pdf", "docx", "txt", "csv", "xlsx"], rag=True)
 ```
 
 4. Run `fastapi run agent/app.py --port 8000` to start the FastAPI server

@@ -79,9 +79,16 @@ llms = [
     LLM("gpt-3.5-turbo", LLMConditions(domain="general", sentiment="positive", topic="general", description="Suitable for simple, straightforward tasks."), execute_openai_3_5),
 ]
 
+weights: dict = {"semantic": 0.3, "topic": 0.5, "sentiment": 0.3}
+sentiment_weights: dict = {"positive": 0.5, "negative": 0.5}
+emotion_weights: dict = {"happy": 0.5, "sad": 0.5}
+
 orchestrator = Orchestrator(
     llms=llms,
-    text_model=SentenceTransformer("all-MiniLM-L12-v2")
+    text_model=SentenceTransformer("all-MiniLM-L12-v2"),
+    weights=weights,
+    sentiment_weights=sentiment_weights,
+    emotion_weights=emotion_weights
 )
 
 agent = Agent("SAMUEL", accepted_files=["pdf", "docx", "txt", "csv", "xlsx"], rag=True)
@@ -92,6 +99,6 @@ def add_llm(llm: LLM):
 def get_orchestrator():
     return orchestrator
 
-def execute_orchestrator(prompt: str):
-    return orchestrator.execute(prompt)
+def execute_orchestrator(prompt: str, weights: dict = weights, sentiment_weights: dict = sentiment_weights, emotion_weights: dict = emotion_weights):
+    return orchestrator.execute(prompt, weights, sentiment_weights, emotion_weights)
 
