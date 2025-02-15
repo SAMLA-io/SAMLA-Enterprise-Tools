@@ -13,7 +13,7 @@ def get_audio_processing(company_id: str, session_id: str, user_id: str, audio: 
     
     audio_text = transcribe_audio(audio)
 
-    response = ask(company_id=company_id, user_id=user_id, prompt=audio_text, rag=True, session_id=session_id)
+    response = ask(company_id=company_id, user_id=user_id, session_id=session_id, prompt=audio_text, rag=True, insert_history=False)
 
     return response
 

@@ -7,7 +7,7 @@ import requests
 import json
 from ..setup import MONGO_AWS_URL, MONGO_CHAT_HISTORY_COLLECTION, MONGO_AWS_TOKEN
 
-def get_chat_history(company_id: str, user_id: str):
+def get_chat_history(company_id: str, user_id: str, include_response: bool = True):
     """
     Get the chat history from the database. 
     
@@ -22,7 +22,7 @@ def get_chat_history(company_id: str, user_id: str):
     )
 
     full_database = full_database.json()
-
+    
     full_database = sorted(full_database, key=lambda x: x["timestamp"])
     full_database = full_database[:10]
 
@@ -32,10 +32,12 @@ def get_chat_history(company_id: str, user_id: str):
         entry.pop("session_id")
         entry.pop("timestamp")
         entry.pop("_id")
+        if not include_response:
+            entry.pop("response")
 
     return full_database
 
-def insert_chat_history(company_id: str, session_id: str, user_id: str, message: str):
+def insert_chat_history(company_id: str, session_id: str, user_id: str, user_message: str, agent_message: str):
     """
     Insert a message into the chat history.
     """
@@ -46,7 +48,8 @@ def insert_chat_history(company_id: str, session_id: str, user_id: str, message:
             "session_id": session_id,
             "timestamp": str(datetime.now()),
             "user_id": user_id,
-            "message": message,
+            "message": user_message,
+            "response": agent_message
         }
     },
     headers={"Authorization": f"Bearer {MONGO_AWS_TOKEN}", "Content-Type": "application/json"}

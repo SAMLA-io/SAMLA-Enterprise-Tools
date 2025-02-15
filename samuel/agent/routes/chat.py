@@ -11,7 +11,7 @@ def input_message_route(company_id: str, session_id: str, user_id: str, message:
     This function is used to send a message to the Agent.
     """
     try:
-        response = ask(company_id=company_id, user_id=user_id, prompt=message, rag=agent.get_rag(), session_id=session_id)
+        response = ask(company_id=company_id, user_id=user_id, session_id=session_id, prompt=message, rag=agent.get_rag())
         return {
             "statusCode": 200,
             "message": response
@@ -24,7 +24,7 @@ def input_message_route(company_id: str, session_id: str, user_id: str, message:
 
 @router.post("/upload")
 async def upload_file_route(company_id: str, session_id: str, user_id: str, message: str, file: UploadFile = File(...)):
-    """ 
+    """
     This function is used to upload a file to the server for the Agent to process.
     """
     try:
