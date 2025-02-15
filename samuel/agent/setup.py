@@ -13,6 +13,7 @@ nltk.download('vader_lexicon')
 
 load_dotenv()
 
+# Environment variables
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 RAG_URL = os.getenv("RAG_URL")
@@ -86,7 +87,7 @@ emotion_weights: dict = {"happy": 0.5, "sad": 0.5}
 orchestrator = Orchestrator(
     llms=llms,
     text_model=SentenceTransformer("all-MiniLM-L12-v2"),
-    weights=weights,
+    analysis_weights=weights,
     sentiment_weights=sentiment_weights,
     emotion_weights=emotion_weights
 )
