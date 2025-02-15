@@ -6,14 +6,14 @@ from openai import OpenAI
 from ..setup import OPENAI_API_KEY
 from ..helpers.prompting import ask
 
-def get_audio_processing(company_id: str, audio: UploadFile):
+def get_audio_processing(company_id: str, session_id: str, user_id: str, audio: UploadFile):
     """ 
     This function is used to process the audio into text.
     """
     
     audio_text = transcribe_audio(audio)
 
-    response = ask(company_id, audio_text, True)
+    response = ask(company_id=company_id, user_id=user_id, prompt=audio_text, rag=True, session_id=session_id)
 
     return response
 

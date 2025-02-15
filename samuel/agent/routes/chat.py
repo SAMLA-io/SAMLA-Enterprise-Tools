@@ -6,12 +6,12 @@ from ..setup import agent
 router = APIRouter()
 
 @router.get("/input")
-def input_message_route(company_id: str, message: str):
+def input_message_route(company_id: str, session_id: str, user_id: str, message: str):
     """ 
     This function is used to send a message to the Agent.
     """
     try:
-        response = ask(company_id, message, agent.get_rag())
+        response = ask(company_id=company_id, user_id=user_id, prompt=message, rag=agent.get_rag(), session_id=session_id)
         return {
             "statusCode": 200,
             "message": response
@@ -23,12 +23,12 @@ def input_message_route(company_id: str, message: str):
         }
 
 @router.post("/upload")
-async def upload_file_route(company_id: str, message: str, file: UploadFile = File(...)):
+async def upload_file_route(company_id: str, session_id: str, user_id: str, message: str, file: UploadFile = File(...)):
     """ 
     This function is used to upload a file to the server for the Agent to process.
     """
     try:
-        response = ask_file(company_id, message, file, agent.get_rag())
+        response = ask_file(company_id=company_id, session_id=session_id, user_id=user_id, prompt=message, file=file, rag=agent.get_rag())
         return {
             "statusCode": 200,
             "message": response

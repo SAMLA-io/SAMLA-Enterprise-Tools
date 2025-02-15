@@ -6,12 +6,13 @@ from ..helpers.chat_recommendations import get_chat_recommendations
 router = APIRouter()
 
 @router.get("/get_chat_recommendations")
-def get_chat_recommendations_route(company_id: str):
+def get_chat_recommendations_route(company_id: str, user_id: str):
     """ 
     This function is used to get the recommendations based on the chat.
     """ 
+
     try:
-        response = get_chat_recommendations(company_id)
+        response = get_chat_recommendations(company_id, user_id)
         return {
             "statusCode": 200,
             "message": response
