@@ -3,9 +3,11 @@
 # This file is used to connect to the database and get the chat history
 
 from datetime import datetime
+from ..setup import MONGO_AWS_URL, MONGO_CHAT_HISTORY_COLLECTION, MONGO_AWS_TOKEN
+
+import aiohttp
 import requests
 import json
-from ..setup import MONGO_AWS_URL, MONGO_CHAT_HISTORY_COLLECTION, MONGO_AWS_TOKEN
 
 def get_chat_history(company_id: str, user_id: str, include_response: bool = True):
     """
@@ -37,21 +39,20 @@ def get_chat_history(company_id: str, user_id: str, include_response: bool = Tru
 
     return full_database
 
-def insert_chat_history(company_id: str, session_id: str, user_id: str, user_message: str, agent_message: str):
+async def insert_chat_history_async(company_id: str, session_id: str, user_id: str, user_message: str, agent_message: str):
     """
-    Insert a message into the chat history.
+    Insert a message into the chat history asynchronously.
     """
-    requests.post(f"{MONGO_AWS_URL}/insert_one", json={
-        "database": company_id,
-        "collection": MONGO_CHAT_HISTORY_COLLECTION,
-        "data": {
-            "session_id": session_id,
-            "timestamp": str(datetime.now()),
-            "user_id": user_id,
-            "message": user_message,
-            "response": agent_message
-        }
-    },
-    headers={"Authorization": f"Bearer {MONGO_AWS_TOKEN}", "Content-Type": "application/json"}
-    ) 
-    
+    async with aiohttp.ClientSession() as session:
+        async with session.post(f"{MONGO_AWS_URL}/insert_one", json={
+            "database": company_id,
+            "collection": MONGO_CHAT_HISTORY_COLLECTION,
+            "data": {
+                "session_id": session_id,
+                "timestamp": str(datetime.now()),
+                "user_id": user_id,
+                "message": user_message,
+                "response": agent_message
+            }
+        }, headers={"Authorization": f"Bearer {MONGO_AWS_TOKEN}", "Content-Type": "application/json"}) as response:
+            return await response.text()

@@ -5,7 +5,7 @@ from ..helpers.prompting import ask
 from ..helpers.database_connection import get_chat_history
 import json
 
-def get_chat_recommendations(company_id: str, user_id: str, session_id: str):
+async def get_chat_recommendations(company_id: str, user_id: str, session_id: str):
     chat_history = get_chat_history(company_id, user_id, include_response=False)
 
     prompt = f"""
@@ -13,6 +13,6 @@ def get_chat_recommendations(company_id: str, user_id: str, session_id: str):
         Chat history: {chat_history}
     """
     
-    response = ask(company_id=company_id, user_id=user_id, session_id=session_id, prompt=prompt, rag=False, insert_history=False)
+    response = await ask(company_id=company_id, user_id=user_id, session_id=session_id, prompt=prompt, rag=False, insert_history=False)
 
     return response
