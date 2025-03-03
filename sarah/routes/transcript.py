@@ -1,62 +1,62 @@
-import asyncio
-import json
+from aiohttp import web
+from twilio.twiml.voice_response import VoiceResponse
+from twilio.rest import Client
+from deepgram import Deepgram
 import os
 
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
-from deepgram import Deepgram
-from twilio.twiml.voice_response import Dial, VoiceResponse
-from twilio.rest import Client
-from pysondb import db
-from dotenv import load_dotenv
+# /inbound
+async def inbound_handler(request):
+    twiml = VoiceResponse()
+    dial = twiml.dial(record="record-from-answer-dual", recording_status_callback="/transcribe")
+    dial.number(os.getenv("FORWARDING_NUMBER"))
+    return web.Response(text=str(twiml), content_type='text/xml')
 
-app = FastAPI()
+# /transcribe
+async def transcribe_handler(request):
+    data = await request.post()
+    recording_url = data.get('RecordingUrl')
+    call_sid = data.get('CallSid')
 
-calls_db = db.getDb('calls')
+    twilio_client = Client()
+    call = twilio_client.calls(call_sid).fetch()
+    caller = call.from_
+    twilio_number = call.to
 
-load_dotenv()
+    options = {
+        "punctuate": True,
+        "tier": "enhanced",
+        "summarize": True
+    }
 
-@app.post("/inbound")
-async def inbound_call():
-    response = VoiceResponse()
-    dial = Dial(
-        record='record-from-answer-dual',
-        recording_status_callback='https://6d71-104-6-9-133.ngrok.io/recordings'
+    deepgram_client = Deepgram(os.getenv("DEEPGRAM_API_KEY"))
+    response = await deepgram_client.transcription.pre_recorded_url(
+        {
+            "url": recording_url
+        },
+        options
     )
 
-    dial.number(os.getenv("RECEIVER_NUMBER"))
-    response.append(dial)
+    result = response.get("result")
+    error = response.get("error")
 
-    return str(response)
+    if error:
+        raise Exception(error)
 
-@app.post("/recordings")
-async def get_recordings(request: Request):
-    deepgram = Deepgram(os.getenv("DEEPGRAM_API_KEY"))
+    summaries = result['results']['channels'][0]['alternatives'][0]['summaries']
+    summary = "\n\n".join([s['summary'] for s in summaries])
 
-    form = await request.form()
-    recording_url = form['RecordingUrl']
-    source = {'url': recording_url}
-    transcript_data = await deepgram.transcription.prerecorded(source, {
-        'punctuate': True,
-        'utterances': True,
-        'model': 'phonecall',
-        'multichannel': True
-    })
+    for number in [os.getenv("FORWARDING_NUMBER"), caller]:
+        twilio_client.messages.create(
+            body=summary,
+            to=number,
+            from_=twilio_number
+        )
 
-    if 'results' in transcript_data:
-        utterances = [
-            {
-                'channel': utterance['channel'],
-                'transcript': utterance['transcript']
-            } for utterance in transcript_data['results']['utterances']
-        ]
+    return web.Response(text="true")
 
-        calls_db.addMany(utterances)
+app = web.Application()
+app.router.add_post('/inbound', inbound_handler)
+app.router.add_post('/transcribe', transcribe_handler)
 
-        return JSONResponse(content=utterances)
-
-@app.get("/transcribe")
-async def transcribe_call():
-    context = calls_db.getAll()
-    print(context)
-    return JSONResponse(content=context)
+if __name__ == '__main__':
+    web.run_app(app)
