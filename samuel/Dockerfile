@@ -13,4 +13,6 @@ RUN pip install --no-cache-dir --upgrade -r requirements.txt
 
 COPY . /app
 
-CMD ["fastapi", "run", "agent/app.py", "--port", "8000"]
+EXPOSE 8001
+
+CMD ["fastapi", "run", "agent/app.py", "--port", "8001"]
