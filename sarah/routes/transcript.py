@@ -1,61 +1,62 @@
-import os
+import asyncio
 import json
-from fastapi import FastAPI, Request, Form
-from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
+import os
+
+from flask import Flask, request, render_template
 from deepgram import Deepgram
 from twilio.twiml.voice_response import Dial, VoiceResponse
+from twilio.rest import Client
 from pysondb import db
 from dotenv import load_dotenv
 
-app = FastAPI()
-templates = Jinja2Templates(directory="templates")
+app = Flask(__name__)
 
-calls_db = db.getDb('calls')
+calls_db=db.getDb('calls')
 
 load_dotenv()
 
 @app.post("/inbound")
-async def inbound_call():
-    response = VoiceResponse()
-    dial = Dial(
-        record='record-from-answer-dual',
-        recording_status_callback='https://1fd4-189-175-57-181.ngrok-free.app/recordings'
-    )
-    dial.number(os.getenv("RECEIVER_NUMBER"))
-    response.append(dial)
-    return HTMLResponse(content=str(response), status_code=200)
+def inbound_call():
+  response = VoiceResponse()
+  dial = Dial(
+      record='record-from-answer-dual',
+      recording_status_callback='https://6d71-104-6-9-133.ngrok.io/recordings'
+      )
 
-@app.post("/recordings")
-async def get_recordings(request: Request):
-    deepgram = Deepgram(os.getenv("DEEPGRAM_API_KEY"))
-    form = await request.form()
-    recording_url = form['RecordingUrl']
-    source = {'url': recording_url}
-    transcript_data = await deepgram.transcription.prerecorded(source, {
-        'punctuate': True,
-        'utterances': True,
-        'model': 'phonecall',
-        'multichannel': True
-    })
+  dial.number(os.getenv("RECEIVER_NUMBER"))
+  response.append(dial)
 
-    if 'results' in transcript_data:
-        utterances = [
-            {
-                'channel': utterance['channel'],
-                'transcript': utterance['transcript']
-            } for utterance in transcript_data['results']['utterances']
-        ]
+  return str(response)
 
-        calls_db.addMany(utterances)
+@app.route("/recordings", methods=['GET', 'POST'])
+async def get_recordings():
+   deepgram = Deepgram(os.getenv("DEEPGRAM_API_KEY"))
 
-        return json.dumps(utterances, indent=4)
+   recording_url = request.form['RecordingUrl']
+   source = {'url': recording_url}
+   transcript_data = await deepgram.transcription.prerecorded(source, {'punctuate': True,
+    'utterances': True,
+    'model': 'phonecall',
+    'multichannel': True
+  })
 
-@app.get("/transcribe", response_class=HTMLResponse)
-async def transcribe_call(request: Request):
-    context = calls_db.getAll()
-    return templates.TemplateResponse("template.html", {"request": request, "context": context})
+   if 'results' in transcript_data:
+       utterances = [
+           {
+               'channel': utterance['channel'],
+               'transcript': utterance['transcript']
+           } for utterance in transcript_data['results']['utterances']
+       ]
+
+       calls_db.addMany(utterances)
+
+       return json.dumps(utterances, indent=4)
+   
+@app.route("/transcribe", methods=['GET', 'POST'])
+def transcribe_call():
+   context = calls_db.getAll()
+   return render_template("index.html", context=context )
+
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+   app.run(debug=True)
