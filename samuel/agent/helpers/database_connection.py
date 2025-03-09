@@ -9,21 +9,29 @@ import aiohttp
 import requests
 import json
 
-def get_chat_history(company_id: str, user_id: str, include_response: bool = True):
+def get_chat_history(company_id: str, user_id: str, session_id: str = None, include_response: bool = True):
     """
     Get the chat history from the database. 
-    
+
     This is the only function that directly calls the database. 
     """
-    full_database = requests.get(f"{MONGO_AWS_URL}/get_many", params={
-        "database": company_id,
-        "collection": MONGO_CHAT_HISTORY_COLLECTION,
-        "query": json.dumps({"user_id": user_id})
-    },
-    headers={"Authorization": f"Bearer {MONGO_AWS_TOKEN}", "Content-Type": "application/json"}
-    )
 
-    full_database = full_database.json()
+    if session_id:
+        full_database = requests.get(f"{MONGO_AWS_URL}/get_many", params={
+            "database": company_id,
+        "collection": MONGO_CHAT_HISTORY_COLLECTION,
+        "query": json.dumps({"user_id": user_id, "session_id": session_id})
+        },
+        headers={"Authorization": f"Bearer {MONGO_AWS_TOKEN}", "Content-Type": "application/json"}
+        )
+    else:
+        full_database = requests.get(f"{MONGO_AWS_URL}/get_many", params={
+            "database": company_id,
+            "collection": MONGO_CHAT_HISTORY_COLLECTION,
+            "query": json.dumps({"user_id": user_id})
+        },
+        headers={"Authorization": f"Bearer {MONGO_AWS_TOKEN}", "Content-Type": "application/json"}
+        )
     
     full_database = sorted(full_database, key=lambda x: x["timestamp"])
     full_database = full_database[:10]
