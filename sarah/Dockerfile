@@ -10,5 +10,5 @@ RUN apt-get update && apt-get install -y \
 
 RUN pip install -r requirements.txt
 
-EXPOSE 8000
-CMD ["fastapi", "run", "routes/vapi_analysis.py", "--port", "8000"]
+EXPOSE 8002
+CMD ["fastapi", "run", "routes/vapi_analysis.py", "--port", "8002"]
