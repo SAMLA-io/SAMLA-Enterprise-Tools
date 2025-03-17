@@ -9,5 +9,6 @@ RUN apt-get update && apt-get install -y \
     git
 
 RUN pip install -r requirements.txt
-    
-CMD ["python", "app.py"]
+
+EXPOSE 8000
+CMD ["fastapi", "run", "routes/vapi_analysis.py", "--port", "8000"]
