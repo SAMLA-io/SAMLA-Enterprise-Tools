@@ -1,6 +1,6 @@
 # Written by Juan Pablo Gutiérrez
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from ..helpers.chat_recommendations import get_chat_recommendations
 
 router = APIRouter()
@@ -14,12 +14,8 @@ async def get_chat_recommendations_route(company_id: str, user_id: str):
     try:
         response = await get_chat_recommendations(company_id, user_id)
         return {
-            "statusCode": 200,
             "message": response
         }
     except Exception as e:
-        return {
-            "statusCode": 500,
-            "message": str(e)
-        }
+        raise HTTPException(status_code=500, detail=str(e))
 
