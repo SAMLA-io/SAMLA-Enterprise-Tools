@@ -19,8 +19,8 @@ def get_chat_history(company_id: str, user_id: str, session_id: str = None, incl
     if session_id:
         full_database = requests.get(f"{MONGO_AWS_URL}/get_many", params={
             "database": company_id,
-        "collection": MONGO_CHAT_HISTORY_COLLECTION,
-        "query": json.dumps({"user_id": user_id, "session_id": session_id})
+            "collection": MONGO_CHAT_HISTORY_COLLECTION,
+            "query": json.dumps({"user_id": user_id, "session_id": session_id})
         },
         headers={"Authorization": f"Bearer {MONGO_AWS_TOKEN}", "Content-Type": "application/json"}
         )
@@ -32,6 +32,8 @@ def get_chat_history(company_id: str, user_id: str, session_id: str = None, incl
         },
         headers={"Authorization": f"Bearer {MONGO_AWS_TOKEN}", "Content-Type": "application/json"}
         )
+
+    full_database = full_database.json()
     
     full_database = sorted(full_database, key=lambda x: x["timestamp"])
     full_database = full_database[:10]
