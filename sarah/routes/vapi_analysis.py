@@ -8,18 +8,53 @@ dotenv.load_dotenv()
 app = FastAPI()
 
 auth_token = os.getenv('VAPI_AUTH_TOKEN')
-call_id = '68611081-f21a-4da8-9643-5d81814ff334'
+assistant_id = os.getenv('VAPI_ASSISTANT_ID')
 
 headers = {
     'Authorization': f'Bearer {auth_token}',
+    'Content-Type': 'application/json'
 }
 
+def get_latest_call_id():
+    response = requests.get(
+        'https://api.vapi.ai/call',
+        headers=headers,
+        params={'assistantId': assistant_id}
+    )
+    if response.status_code == 200:
+        calls = response.json()
+        if calls:
+            return calls[0]['id']
+        else:
+            raise HTTPException(status_code=404, detail="No calls found for this assistant")
+    else:
+        raise HTTPException(status_code=response.status_code, detail="Failed to retrieve calls list")
+
 def get_call_data():
+    call_id = get_latest_call_id()
     response = requests.get(f'https://api.vapi.ai/call/{call_id}', headers=headers)
     if response.status_code == 200:
         return response.json()
     else:
         raise HTTPException(status_code=response.status_code, detail="Failed to retrieve call data")
+
+@app.get("/call_ids")
+def get_all_call_ids():
+    response = requests.get(
+        'https://api.vapi.ai/call',
+        headers=headers,
+        params={'assistantId': assistant_id}
+    )
+    if response.status_code == 200:
+        calls = response.json()
+        if calls:
+            call_ids = [call['id'] for call in calls]
+            return {"Call IDs": call_ids}
+        else:
+            return {"message": "No calls found for this assistant"}
+    else:
+        raise HTTPException(status_code=response.status_code, detail="Failed to retrieve call list")
+
 
 @app.get("/basic_info")
 def basic_info():
@@ -31,7 +66,6 @@ def basic_info():
         "Ended At": call_data['endedAt'],
         "Status": call_data['status'],
         "Ended Reason": call_data['endedReason']
-        
     }
 
 @app.get("/analysis")
