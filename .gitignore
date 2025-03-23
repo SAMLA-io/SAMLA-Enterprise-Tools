@@ -6,6 +6,7 @@ sarah/routes/ecommerce_product_dataset.csv
 __pycache__/
 *.py[cod]
 *$py.class
+myenv/
 
 # C extensions
 *.so
