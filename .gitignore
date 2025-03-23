@@ -1,5 +1,7 @@
 sarah/hume/.env
 .venv/
+myenv/
+julian/ecommerce_product_dataset.csv
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
