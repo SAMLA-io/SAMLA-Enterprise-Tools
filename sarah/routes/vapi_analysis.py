@@ -59,6 +59,7 @@ def get_all_call_ids():
 @app.get("/basic_info")
 def basic_info():
     call_data = get_call_data()
+    print(call_data)
     return {
         "Call ID": call_data['id'],
         "Type": call_data['type'],
@@ -79,9 +80,14 @@ def analysis():
 
 @app.get("/customer_info")
 def customer_info():
-    call_data = get_call_data()
+    try:
+        call_data = get_call_data()
+        customer_number = call_data.get('customer', {}).get('number', "Web")
+    except Exception:
+        customer_number = "Web"
+    
     return {
-        "Customer Number": call_data['customer']['number']
+        "Customer Number": customer_number
     }
 
 @app.get("/transcript")
@@ -103,3 +109,7 @@ def recording_urls():
 def cost_breakdown():
     call_data = get_call_data()
     return call_data['costBreakdown']
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("vapi_analysis:app", host="0.0.0.0", port=8000, reload=True)
