@@ -17,7 +17,6 @@ load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 RAG_URL = os.getenv("RAG_URL")
-RAG_COLLECTION = os.getenv("RAG_COLLECTION")
 
 MONGO_AWS_URL = os.getenv("MONGO_AWS_URL")
 MONGO_AWS_TOKEN = os.getenv("MONGO_AWS_TOKEN")
@@ -93,12 +92,6 @@ orchestrator = Orchestrator(
 )
 
 agent = Agent("SAMUEL", accepted_files=["pdf", "docx", "txt", "csv", "xlsx"], rag=True)
-
-def add_llm(llm: LLM):
-    orchestrator.add_llm(llm)
-
-def get_orchestrator():
-    return orchestrator
 
 def execute_orchestrator(prompt: str, weights: dict = weights, sentiment_weights: dict = sentiment_weights, emotion_weights: dict = emotion_weights):
     return orchestrator.execute(prompt, weights, sentiment_weights, emotion_weights)
