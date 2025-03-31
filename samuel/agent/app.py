@@ -2,7 +2,6 @@
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
 from agent.helpers.session_manager import generate_session_id
 from .routes.chat import router as chat_router
 from .routes.graphs import router as graphs_router
