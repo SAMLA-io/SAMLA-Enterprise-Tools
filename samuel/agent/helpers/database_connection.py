@@ -9,7 +9,7 @@ import aiohttp
 import requests
 import json
 
-def get_chat_history(company_id: str, user_id: str, session_id: str = None, include_response: bool = True):
+def get_chat_history(organization_id: str, user_id: str, session_id: str = None, include_response: bool = True):
     """
     Get the chat history from the database. 
 
@@ -18,7 +18,7 @@ def get_chat_history(company_id: str, user_id: str, session_id: str = None, incl
 
     if session_id:
         full_database = requests.get(f"{MONGO_AWS_URL}/get_many", params={
-            "database": company_id,
+            "database": organization_id,
             "collection": MONGO_CHAT_HISTORY_COLLECTION,
             "query": json.dumps({"user_id": user_id, "session_id": session_id})
         },
@@ -26,19 +26,26 @@ def get_chat_history(company_id: str, user_id: str, session_id: str = None, incl
         )
     else:
         full_database = requests.get(f"{MONGO_AWS_URL}/get_many", params={
-            "database": company_id,
+            "database": organization_id,
             "collection": MONGO_CHAT_HISTORY_COLLECTION,
             "query": json.dumps({"user_id": user_id})
         },
         headers={"Authorization": f"Bearer {MONGO_AWS_TOKEN}", "Content-Type": "application/json"}
         )
-
-    full_database = full_database.json()
     
-    full_database = sorted(full_database, key=lambda x: x["timestamp"])
+    try:
+        full_database = full_database.json()
+    except:
+        return []
+    
+    if not isinstance(full_database, list):
+        return []
+        
+    valid_entries = [entry for entry in full_database if isinstance(entry, dict) and "timestamp" in entry]
+    
+    full_database = sorted(valid_entries, key=lambda x: x["timestamp"])
     full_database = full_database[:10]
 
-    # Removes unnecessary fields
     for entry in full_database:
         entry.pop("user_id")
         entry.pop("session_id")
@@ -49,13 +56,13 @@ def get_chat_history(company_id: str, user_id: str, session_id: str = None, incl
 
     return full_database
 
-async def insert_chat_history_async(company_id: str, session_id: str, user_id: str, user_message: str, agent_message: str):
+async def insert_chat_history_async(organization_id: str, session_id: str, user_id: str, user_message: str, agent_message: str):
     """
     Insert a message into the chat history asynchronously.
     """
     async with aiohttp.ClientSession() as session:
         async with session.post(f"{MONGO_AWS_URL}/insert_one", json={
-            "database": company_id,
+            "database": organization_id,
             "collection": MONGO_CHAT_HISTORY_COLLECTION,
             "data": {
                 "session_id": session_id,
