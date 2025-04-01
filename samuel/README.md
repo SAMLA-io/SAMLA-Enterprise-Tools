@@ -7,8 +7,11 @@ SAMUEL is an intelligent agent system that orchestrates multiple LLM models and 
 - 🤖 Multi-model orchestration with GPT-4, GPT-4 Optimized, and GPT-3.5 Turbo
 - 📚 RAG (Retrieval-Augmented Generation) support
 - 📄 Multiple file format support (PDF, DOCX, TXT, CSV, XLSX)
+- 🎤 Audio transcription support
+- 📊 Graph generation capabilities
 - 🔄 Intelligent model selection based on task requirements
 - 💡 Sentiment and domain-aware processing
+- 💬 Chat history and recommendations
 
 ## Installation
 
@@ -25,7 +28,6 @@ Create a `.env` file in your project root with the following variables:
 ```
 OPENAI_API_KEY=your_openai_api_key
 RAG_URL=your_rag_service_url
-RAG_COLLECTION=your_rag_collection_name
 MONGO_AWS_URL=your_mongo_url
 MONGO_AWS_TOKEN=your_mongo_token
 MONGO_CHAT_HISTORY_COLLECTION=your_collection_name
@@ -33,104 +35,100 @@ MONGO_CHAT_HISTORY_COLLECTION=your_collection_name
 
 ## Quick Start
 
-All setup is done in the `setup.py` file.
-
-1. Initialize dotenv variables
-2. Create the LLMs and start the orchestrator. You can add more LLMs to the orchestrator if you want, as long as they have the same structure as the ones already there (the executor returns a valid response).
-3. You can also change the weights of the orchestrator to give more or less importance to each LLM.
-4. The necessary weights are:
-    - weight between the importance of the semantic, topic and sentiment.
-    - weight between the importance of the positive and negative sentiments.
-    - weight between the importance of the happy and sad and other emotions.
-5. These weights can be overridden in the `execute_orchestrator` function.
-
-```python
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-
-RAG_URL = os.getenv("RAG_URL")
-RAG_COLLECTION = os.getenv("RAG_COLLECTION")
-
-MONGO_AWS_URL = os.getenv("MONGO_AWS_URL")
-MONGO_AWS_TOKEN = os.getenv("MONGO_AWS_TOKEN")
-MONGO_CHAT_HISTORY_COLLECTION = os.getenv("MONGO_CHAT_HISTORY_COLLECTION")
-
-# SETUP: 
-client = OpenAI(api_key=OPENAI_API_KEY)
-
-def execute_openai_4(messages):
-    response = client.chat.completions.create(
-        model="gpt-4",
-        messages=[
-            {
-                "role": "system",
-                "content": "You are a helpful assistant."
-            },
-            {
-                "role": "user",
-                "content": messages
-            }
-        ]
-    )  
-    return response.choices[0].message.content
-
-def execute_openai_4o(messages):
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {
-                "role": "system",
-                "content": "You are a helpful assistant."
-            },
-            {
-                "role": "user",
-                "content": messages
-            }
-        ]
-    )
-    return response.choices[0].message.content
-
-def execute_openai_3_5(messages):
-    response = client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {
-                "role": "system",
-                "content": "You are a helpful assistant."
-            },
-            {
-                "role": "user",
-                "content": messages
-            }
-        ]
-    )
-    return response.choices[0].message.content
-
-llms = [
-    LLM("gpt-4", LLMConditions(domain="creativity", sentiment="positive", topic="arts", description="Optimized for reasoning, creativity, and complex tasks."), execute_openai_4),
-    LLM("gpt-4o", LLMConditions(domain="general", sentiment="positive", topic="general", description="Moderately optimized for balanced tasks and cost-efficiency."), execute_openai_4o),
-    LLM("gpt-3.5-turbo", LLMConditions(domain="general", sentiment="positive", topic="general", description="Suitable for simple, straightforward tasks."), execute_openai_3_5),
-]
-
-weights: dict = {"semantic": 0.3, "topic": 0.5, "sentiment": 0.3}
-sentiment_weights: dict = {"positive": 0.5, "negative": 0.5}
-emotion_weights: dict = {"happy": 0.5, "sad": 0.5}
-
-orchestrator = Orchestrator(
-    llms=llms,
-    text_model=SentenceTransformer("all-MiniLM-L12-v2"),
-    weights=weights,
-    sentiment_weights=sentiment_weights,
-    emotion_weights=emotion_weights
-)
+1. Start the FastAPI server:
+```bash
+python agent/app.py
 ```
 
-3. Create the agent and start the chat
+2. The server will start on `http://localhost:8000`
 
-```python
-agent = Agent("SAMUEl", accepted_files=["pdf", "docx", "txt", "csv", "xlsx"], rag=True)
+## API Endpoints
+
+### Session Management
+- `GET /session` - Generate a new session ID for tracking conversations
+
+### Chat Endpoints
+- `GET /input` - Send a text message to the agent
+  - Parameters:
+    - `organization_id`: Your organization ID
+    - `session_id`: Session ID from `/session` endpoint
+    - `user_id`: User identifier
+    - `message`: Your message to the agent
+
+- `POST /upload` - Upload a file for processing
+  - Parameters:
+    - `organization_id`: Your organization ID
+    - `session_id`: Session ID from `/session` endpoint
+    - `user_id`: User identifier
+    - `message`: Context or question about the file
+    - `file`: File to process (PDF, DOCX, TXT, CSV, XLSX)
+
+### Audio Processing
+- `POST /audio` - Process audio files
+  - Parameters:
+    - `organization_id`: Your organization ID
+    - `session_id`: Session ID from `/session` endpoint
+    - `user_id`: User identifier
+    - `file`: Audio file to transcribe and process
+
+### Graph Generation
+- `GET /get_graphs` - Generate graphs from data
+  - Parameters:
+    - `x`: Comma-separated x-axis values
+    - `y`: Comma-separated y-axis values
+
+### Recommendations
+- `GET /get_chat_recommendations` - Get chat recommendations based on history
+  - Parameters:
+    - `organization_id`: Your organization ID
+    - `user_id`: User identifier
+    - `session_id`: Session ID from `/session` endpoint
+
+## Example Usage
+
+1. Start a new session:
+```bash
+curl http://localhost:8000/session
 ```
 
-4. Run `fastapi run agent/app.py --port 8000` to start the FastAPI server
+2. Send a message:
+```bash
+curl "http://localhost:8000/input?organization_id=org123&session_id=session456&user_id=user789&message=Hello%20SAMUEL"
+```
+
+3. Upload a file:
+```bash
+curl -X POST "http://localhost:8000/upload" \
+  -H "Content-Type: multipart/form-data" \
+  -F "organization_id=org123" \
+  -F "session_id=session456" \
+  -F "user_id=user789" \
+  -F "message=Please analyze this document" \
+  -F "file=@document.pdf"
+```
+
+4. Process audio:
+```bash
+curl -X POST "http://localhost:8000/audio" \
+  -H "Content-Type: multipart/form-data" \
+  -F "organization_id=org123" \
+  -F "session_id=session456" \
+  -F "user_id=user789" \
+  -F "file=@audio.mp3"
+```
+
+## Response Format
+
+All endpoints return JSON responses with the following structure:
+```json
+{
+    "message": "Response content",
+    "response_time": "Time taken to generate response",
+    "context_time": "Time taken to fetch context",
+    "chat_history_time": "Time taken to fetch chat history",
+    "insert_history_time": "Time taken to insert into history"
+}
+```
 
 ## License
 
