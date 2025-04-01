@@ -20,19 +20,18 @@ async def ask(organization_id: str, user_id: str, session_id: str, prompt: str, 
     context_time = time.time() - start_time
 
     start_time = time.time()
-   
     chat_history = ""
     if session_id:
         chat_history = get_chat_history(organization_id, user_id, session_id)
     chat_history_time = time.time() - start_time
 
-    start_time = time.time()
     new_prompt = f"Prompt: {prompt}\n"
     if context:
         new_prompt = f"Context: {context}\n" + new_prompt
     if chat_history:
         new_prompt = f"Chat history: {chat_history}\n" + new_prompt
-
+    
+    start_time = time.time()
     response = execute_orchestrator(new_prompt)
     response_time = time.time() - start_time
 
