@@ -14,6 +14,14 @@ def get_graphs_route(x: str, y: str):
     """ 
     This function is used to get the graphs based on the data.
     x and y can be comma-separated values, e.g. "1,2,3,4,5" or JSON-like arrays "[1,2,3,4,5]"
+
+    Args:
+        x: str
+        y: str
+    
+    Returns:
+        message: str
+        graph: str
     """
     # Clean input: remove brackets if present
     x = x.strip("[]")

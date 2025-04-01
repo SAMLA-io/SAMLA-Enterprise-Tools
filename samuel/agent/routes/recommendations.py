@@ -9,8 +9,19 @@ router = APIRouter()
 async def get_chat_recommendations_route(organization_id: str, user_id: str, session_id: str):
     """ 
     This function is used to get the recommendations based on the chat.
+    
+    Args:
+        organization_id: str
+        user_id: str
+        session_id: str
+    
+    Returns:
+        message: str
+        response_time: float
+        context_time: float
+        chat_history_time: float
+        insert_history_time: float
     """ 
-
     try:
         response, response_time, context_time, chat_history_time, insert_history_time = await get_chat_recommendations(organization_id, user_id, session_id)
         
