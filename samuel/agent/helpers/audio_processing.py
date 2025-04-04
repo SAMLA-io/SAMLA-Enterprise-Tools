@@ -13,7 +13,9 @@ async def get_audio_processing(organization_id: str, session_id: str, user_id: s
     
     audio_text = transcribe_audio(audio)
 
-    response, response_time, context_time, chat_history_time, insert_history_time = await ask(organization_id=organization_id, user_id=user_id, session_id=session_id, prompt=audio_text, rag=True, insert_history=False)
+    prompt = f"The user has provided a transcription from a meeting via an audio file. Please provide a summary of the meeting. The transcription is: {audio_text}"
+
+    response, response_time, context_time, chat_history_time, insert_history_time = await ask(organization_id=organization_id, user_id=user_id, session_id=session_id, prompt=prompt, rag=False, insert_history=False)
 
     return response, response_time, context_time, chat_history_time, insert_history_time
 
